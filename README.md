@@ -94,9 +94,16 @@ npx skills add FocacciaSyin/opencode-skills
 | digest（cwd 無 session） | `session-digest.ps1 -Days 7` | ✅ 明確報錯「找不到符合條件的 session（Days=7, Directory=…）」 |
 | digest（指定專案） | `session-digest.ps1 -Days 3 -Directory <專案>` | ✅ 產出 2 份 digest |
 | `git log` / `git status` | `git -C <專案> …` | ✅ |
-| `gh issue list` | `gh issue list --limit 3`（cwd 不是 repo） | ❌ `fatal: not a git repository` |
+| `gh issue list` | `gh issue list --limit 3`（cwd 不是 repo） | ❌ `failed to run git: fatal: not a git repository` |
 
-`gh` 必須在專案目錄內執行；已在 `recall/SKILL.md` 加註。
+`gh` 有兩層前置條件，缺一就會失敗：
+
+| 層 | 缺什麼 | 訊息 | 實測 |
+|---|---|---|---|
+| repo 解析 | cwd 不在 git repo 內 | `failed to run git: fatal: not a git repository`（gh 自己呼叫 git） | temp 目錄 → exit 1 |
+| GitHub 認證 | 沒做 `gh auth login` | 提示登入 | 未登出，未測 |
+
+在專案目錄內（且已登入）正常：`gh issue list --limit 2` → exit 0，列出 #71、#54。
 
 ### 4. reflect 流程
 
