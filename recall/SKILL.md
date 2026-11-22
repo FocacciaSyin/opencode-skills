@@ -18,10 +18,13 @@ description: 重建某個主題近期的工作脈絡（跨多個 session），�
 ## 2. 取 digest
 
 ```powershell
-pwsh ~/.config/opencode/skills/scripts/session-digest.ps1 -Days 7
+# 全域 clone 安裝
+pwsh ~/.config/opencode/skills/recall/scripts/session-digest.ps1 -Days 7
+# npx skills add 安裝（專案內）
+pwsh .agents/skills/recall/scripts/session-digest.ps1 -Days 7
 ```
 
-輸出到 `$env:TEMP/opencode/session-digest/`。若 skill 不在預設位置，改用該 repo 內 `scripts/session-digest.ps1`。
+輸出到 `$env:TEMP/opencode/session-digest/`。腳本與本 skill 同目錄下的 `scripts/`。
 
 - session ≤ 2：直接讀
 - session > 2：切給 subagent，每人 2–3 個，只回結構化摘要，raw digest 留在 subagent
