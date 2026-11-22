@@ -18,6 +18,8 @@ description: 重建某個主題近期的工作脈絡（跨多個 session），�
 
 把範圍講回給使用者，再開始查。
 
+> 以下指令都假設 cwd 是目標專案根目錄。若不在，先 `cd` 進去，或給 digest 加 `-Directory <專案路徑>`；`git`／`gh` 沒有 `-C` 等價寫法時會直接失敗。
+
 ## 2. 取 digest
 
 ```powershell

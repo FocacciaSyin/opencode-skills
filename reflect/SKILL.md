@@ -15,7 +15,7 @@ description: 從本次對話提煉可長期沿用的教訓，路由到既有文�
 
 1. **六個月後仍然成立**
 2. **會改變未來 agent 的行為**
-3. **能指向一個具體落地點**：`AGENTS.md`、`docs/`、`.opencode/skills/`、腳本、測試
+3. **能指向一個具體落地點**：`AGENTS.md`、`docs/`、skill 目錄（`.opencode/skills/` 或 `.agents/skills/`）、腳本、測試
 
 丟掉：
 

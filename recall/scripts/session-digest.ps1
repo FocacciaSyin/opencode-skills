@@ -27,7 +27,8 @@ param(
     [string[]]$SessionId,
     # 專案目錄，預設當前工作目錄
     [string]$Directory,
-    [string]$OutDir = (Join-Path $env:TEMP 'opencode\session-digest'),
+    # 預設 %TEMP%\opencode\session-digest（macOS/Linux 用 TMPDIR 或 /tmp）
+    [string]$OutDir,
     [int]$MaxAssistantChars = 1200,
     # 只輸出使用者訊息
     [switch]$UserOnly,
@@ -40,6 +41,11 @@ $ErrorActionPreference = 'Stop'
 
 if (-not $Directory) {
     $Directory = (Get-Location).Path
+}
+if (-not $OutDir) {
+    # Windows 有 TEMP，macOS/Linux 的 PowerShell 7 只給 TMPDIR
+    $base = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { '/tmp' }
+    $OutDir = Join-Path (Join-Path $base 'opencode') 'session-digest'
 }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 

@@ -58,6 +58,78 @@ git clone https://github.com/FocacciaSyin/opencode-skills.git "$env:USERPROFILE\
 
 OpenCode 也會讀 `~/.claude/skills` 與 `~/.agents/skills`，想共用 dotfiles 可以放那裡。
 
+## 安裝驗證（2026-11-22，Windows / PowerShell 7）
+
+在乾淨的 temp 目錄實測 `npx skills add` 與三支流程。
+
+### 1. 安裝
+
+```powershell
+$P = Join-Path $env:TEMP "skills-acceptance-$(Get-Date -Format 'yyyyMMdd-HHmmss')\project"
+New-Item -ItemType Directory -Force -Path $P | Out-Null
+cd $P
+npx skills add FocacciaSyin/opencode-skills
+```
+
+結果 `Found 3 skills` → `Installed 3 skills`，產出：
+
+```
+.agents/skills/recall/SKILL.md
+.agents/skills/recall/scripts/session-digest.ps1
+.agents/skills/reflect/SKILL.md
+.agents/skills/session-pickup/SKILL.md
+```
+
+### 2. 依賴路徑
+
+| 檢查 | 結果 |
+|---|---|
+| `recall/scripts/session-digest.ps1` 存在 | ✅ |
+| `session-pickup` → `../recall/scripts/session-digest.ps1` | ✅ |
+
+### 3. recall 流程
+
+| 步驟 | 指令 | 結果 |
+|---|---|---|
+| digest（cwd 無 session） | `session-digest.ps1 -Days 7` | ✅ 明確報錯「找不到符合條件的 session（Days=7, Directory=…）」 |
+| digest（指定專案） | `session-digest.ps1 -Days 3 -Directory <專案>` | ✅ 產出 2 份 digest |
+| `git log` / `git status` | `git -C <專案> …` | ✅ |
+| `gh issue list` | `gh issue list --limit 3`（cwd 不是 repo） | ❌ `fatal: not a git repository` |
+
+`gh` 必須在專案目錄內執行；已在 `recall/SKILL.md` 加註。
+
+### 4. reflect 流程
+
+無腳本依賴。落地點存在性檢查（以目標專案為例）：
+
+```
+AGENTS.md              True
+docs                   True
+docs/verification      True
+docs/adr               True
+docs/operations        True
+.opencode/skills       True
+scripts                True
+```
+
+### 5. session-pickup 流程
+
+digest（共用 recall 的腳本）＋ `git status` / `git log` / `git diff` / `gh pr list --head`。路徑與 git 指令可執行；`gh` 同樣需在 repo 內。
+
+### 驗證中發現並修正
+
+| 問題 | 影響 | 修法 |
+|---|---|---|
+| `$env:TEMP` 在 macOS 的 PowerShell 7 不存在 | `OutDir` 在參數綁定時就拋錯，腳本無法啟動 | 預設改 `$null`，內部 fallback `TEMP → TMPDIR → /tmp` |
+| 流程假設 cwd 是專案根目錄 | 在錯誤目錄執行時 `gh`／git 失敗、digest 抓不到 session | `recall/SKILL.md` 加註；digest 支援 `-Directory` |
+| `session-pickup` 的腳本路徑描述模糊 | agent 可能解析不到 | 改列兩種具體路徑 |
+| `reflect` 只列 `.opencode/skills/` | 用 `skills add`（`.agents/skills`）安裝時路由錯誤 | 兩種都列 |
+
+### 已知未驗
+
+- macOS／Linux 實機（本次只測 Windows PowerShell 7）
+- `skills update` 後的檔案一致性
+
 ## 內容
 
 | Skill | 用途 |
