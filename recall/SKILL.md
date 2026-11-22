@@ -23,17 +23,18 @@ description: 重建某個主題近期的工作脈絡（跨多個 session），�
 
 ## 2. 取 digest
 
-```powershell
+```bash
 # 全域 clone 安裝
-pwsh ~/.config/opencode/skills/recall/scripts/session-digest.ps1 -Days 7
+node ~/.config/opencode/skills/recall/scripts/session-digest.mjs --days 7
 # npx skills add 安裝（專案內）
-pwsh .agents/skills/recall/scripts/session-digest.ps1 -Days 7
+node .agents/skills/recall/scripts/session-digest.mjs --days 7
 ```
 
-輸出到 `$env:TEMP/opencode/session-digest/`。腳本與本 skill 同目錄下的 `scripts/`。
+輸出到系統 temp 的 `opencode/session-digest/`。腳本在 `recall/scripts/`，只依賴 `node` 與 `opencode`（不需要 PowerShell）。
 
 - session ≤ 2：直接讀
-- session > 2：切給 subagent，每人 2–3 個，只回結構化摘要，raw digest 留在 subagent
+- session > 2：依**行數**平衡分配（單檔 > 300 行就獨立一份），每人只回結構化摘要，raw digest 留在 subagent
+- digest 出現「(無內容：context 為空)」代表該 session 已被壓縮，回報「資料缺失」，不要推測
 
 ## 3. 掃共享紀錄（有指定主題時必做）
 

@@ -15,7 +15,7 @@ description: 接手一個未完成的 session 或分支，重建狀態並指出�
 ## 1. 找到 trail
 
 - 使用者給的 session id，或
-- 跑 digest 找最接近的那個：`recall/scripts/session-digest.ps1 -Days 3`
+- 跑 digest 找最接近的那個：`node recall/scripts/session-digest.mjs --days 3`
   （全域 clone 為 `~/.config/opencode/skills/recall/scripts/`；`skills add` 安裝為 `.agents/skills/recall/scripts/`），或
 - 或 branch / PR 編號
 
