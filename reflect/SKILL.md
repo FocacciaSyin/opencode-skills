@@ -5,6 +5,10 @@ description: 從本次對話提煉可長期沿用的教訓，路由到既有文�
 
 # Reflect
 
+> 改寫自 pstack `skills/reflect/SKILL.md` 與 `skills/principle-encode-lessons-in-structure/SKILL.md`
+> —— `cursor/plugins@0b46ec3`（pstack 0.15.46，2026-11-19），作者 poteto。
+> 完整對照見 repo README〈來源與版本〉。
+
 只在「這次對話真的改變了做法」時執行。一般收尾不需要。
 
 ## 篩選：三條都成立才留

@@ -5,6 +5,9 @@ description: 重建某個主題近期的工作脈絡（跨多個 session），�
 
 # Recall
 
+> 改寫自 pstack `skills/recall/SKILL.md` —— `cursor/plugins@0b46ec3`（pstack 0.15.46，2026-11-19），作者 poteto。
+> Cursor 專屬的 transcript 路徑與工具名已替換為 OpenCode 做法；完整對照見 repo README〈來源與版本〉。
+
 **先把狀態重建起來，再動手。** 使用者要的是「現在在哪」，不是工作報告。
 
 ## 1. 鎖定範圍

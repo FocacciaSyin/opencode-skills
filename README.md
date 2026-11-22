@@ -5,6 +5,33 @@
 > 這三個 skill 跟特定專案無關，只依賴本機 OpenCode 服務與 `opencode api` CLI。
 > 專案專屬的規則（`AGENTS.md`）留在各自的 repo。
 
+## 來源與版本
+
+改寫自 [pstack](https://github.com/cursor/plugins/tree/main/pstack)（作者 [poteto](https://github.com/poteto)，Cursor）。
+
+| Skill | 上游檔案 | 版本／commit | 讀取日 |
+|---|---|---|---|
+| `recall` | `pstack/skills/recall/SKILL.md` | `cursor/plugins@0b46ec3`（pstack 0.15.46，2026-11-19） | 2026-11-22 |
+| `reflect` | `pstack/skills/reflect/SKILL.md`、`pstack/skills/principle-encode-lessons-in-structure/SKILL.md` | 同上 | 2026-11-22 |
+| `session-pickup` | `pstack/skills/poteto-mode/playbooks/session-pickup.md`、`pause-safely.md` | 同上 | 2026-11-22 |
+| `session-pickup`（兩條規則） | [mattpocock/skills · claude-handoff](https://skills.sh/mattpocock/skills/claude-handoff) | `mattpocock/skills@abeeaf9`（2026-11-19） | 2026-11-22 |
+| `recall/scripts/session-digest.ps1` | 原創（OpenCode 專屬，上游無對應工具） | — | — |
+
+### 已改寫的部分
+
+上游是 Cursor 專屬，以下全部換成 OpenCode 的做法：
+
+| 上游 | 這裡 |
+|---|---|
+| `~/.cursor/projects/<slug>/agent-transcripts/*.jsonl` | `opencode api get /api/session/{id}/context` |
+| `AskQuestion` 工具 | `question` 工具 |
+| `subagent_type: "poteto-agent"` | `subagent`（agent 參數） |
+| 模型 slug（`claude-opus-5-5-xhigh-fast` 等） | 不指定，繼承當前模型 |
+| `/deslop`、`control-ui`、plugin cache 路徑 | 移除 |
+| Cursor 內建 `/loop` | 移除（OpenCode 無對應） |
+
+上游若更新，不會自動同步——這是刻意的，方便自己調整。
+
 ## 安裝
 
 **方式一：`skills` CLI（生態系標準）**

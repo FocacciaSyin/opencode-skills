@@ -5,6 +5,11 @@ description: 接手一個未完成的 session 或分支，重建狀態並指出�
 
 # Session pickup
 
+> 改寫自 pstack `poteto-mode/playbooks/session-pickup.md` 與 `pause-safely.md`
+> —— `cursor/plugins@0b46ec3`（pstack 0.15.46，2026-11-19），作者 poteto。
+> 另參考 mattpocock/skills 的 `claude-handoff`（`mattpocock/skills@abeeaf9`，2026-11-19）取兩條規則：交接內容要 redact 敏感資訊、既有 artifact 用引用不重複貼。
+> 完整對照見 repo README〈來源與版本〉。
+
 **你擁有續做點。讀前人的紀錄，不要重做。**
 
 ## 1. 找到 trail
