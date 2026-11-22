@@ -94,6 +94,9 @@ npx skills add FocacciaSyin/opencode-skills
 | digest（cwd 無 session） | `node session-digest.mjs --days 7` | ✅ exit 1，明確訊息「找不到符合條件的 session」 |
 | digest（指定專案） | `node session-digest.mjs --days 1 --directory <專案>` | ✅ 產出 4 份 |
 | 空 context 的 session | `node session-digest.mjs --session <id>` | ✅ 標記「(無內容：context 為空…)」，console 也標 `(空)` |
+| 不存在的 session | `node session-digest.mjs --session ses_doesnotexist` | ✅ 「跳過 …：HTTP 404 Not Found」，exit 1（不吐 stack trace） |
+| 未給參數 | `node session-digest.mjs` | ✅ 印用法，exit 1 |
+| redaction | 含 `sqlcmd -P "…"` 的 session | ✅ 密碼／`Password=`／`Bearer` 殘留皆 0 |
 | 長回覆截斷 | 同上 | ✅ 出現 24 處「（略 N 字）」，保留頭 800 + 尾 400 |
 | `git log` / `git status` | `git -C <專案> …` | ✅ |
 | `gh issue list` | `gh issue list --limit 3`（cwd 不是 repo） | ❌ `failed to run git: fatal: not a git repository` |

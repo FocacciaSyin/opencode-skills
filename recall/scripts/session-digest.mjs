@@ -173,7 +173,15 @@ if (sessions.length === 0) {
 }
 
 for (const session of sessions) {
-  const { lines, contentCount } = buildDigest(session, opts)
+  let digest
+  try {
+    digest = buildDigest(session, opts)
+  } catch (error) {
+    console.error(`跳過 ${session.id}：${error.message}`)
+    process.exitCode = 1
+    continue
+  }
+  const { lines, contentCount } = digest
   const file = join(opts.outDir, `${session.id}.txt`)
   writeFileSync(file, lines.join('\n') + '\n', 'utf8')
   const note = contentCount === 0 ? '  (空)' : ''
