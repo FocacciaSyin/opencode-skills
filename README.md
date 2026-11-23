@@ -50,7 +50,7 @@ git clone https://github.com/FocacciaSyin/opencode-skills.git ~/.config/opencode
 存檔後 OpenCode 會自動重新載入，不需要重啟。更新：`git -C ~/.config/opencode/skill-repos/opencode-skills pull`。
 
 - `skills` 陣列的來源優先權最高，會覆蓋 `~/.config/opencode/skills` 等位置中同名的 skill。
-- repo 根目錄的 `README.md` 也會被註冊為 ID `README` 的 skill；它沒有 `description`，不會出現在模型的 skill 清單中。
+- repo 根目錄的 `README.md` 也會被註冊為 skill（實測 ID 為 `opencode-skills`）；它沒有 `description`，不會出現在模型的 skill 清單中。
 
 **方式二：`skills` CLI**
 
@@ -176,6 +176,17 @@ npx skills add FocacciaSyin/opencode-skills -a opencode -y
 | 單元測試（從安裝位置執行） | ✅ 14 個測試全部通過 |
 | `--session` 不存在的 ID | ✅ 列在 `sessions_not_found` |
 
+### 方式一（`skills` 陣列）實際註冊
+
+把 clone 路徑加進全域 `opencode.json` 的 `skills` 陣列，存檔後以 `opencode api get /api/skill` 查詢：
+
+| 檢查 | 結果 |
+|---|---|
+| 三個 skill 的載入來源 | ✅ `recall`、`reflect`、`session-pickup` 的 `path` 都指向 clone 內的 `SKILL.md`，覆蓋 `~/.config/opencode/skills` 中的同名 skill |
+| 只能手動呼叫 | ✅ 三個 skill 的 `autoinvoke` 都是 `false` |
+| 根目錄 `README.md` | ✅ 註冊為 ID `opencode-skills`、沒有 `description`，不會出現在模型的 skill 清單中 |
+| 重新載入 | ✅ 存檔後不需重啟即生效 |
+
 ### 用真實 session 跑完整流程
 
 以作者本機的同流程版本執行（差別只在 PR 平台與專案驗證流程寫成具體工具名稱）；本 repo 的通用版步驟相同。
@@ -201,7 +212,6 @@ npx skills add FocacciaSyin/opencode-skills -a opencode -y
 ### 已知未驗
 
 - macOS／Linux 實機（本次只測 Windows 11）
-- 方式一（`skills` 陣列）的實際註冊結果（依官方文件撰寫）
 
 ## 注意
 
