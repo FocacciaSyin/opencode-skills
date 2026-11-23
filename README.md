@@ -98,11 +98,11 @@ python -I "$S" --directory ~/work/app --directory ~/work/app-specs --days 7 --la
 | `--exclude-skill` | 排除載入或呼叫過該 skill 的 session，可重複 |
 | `--exclude-session` | 排除指定 session，可重複；目前 session（`OPENCODE_SESSION_ID`）預設排除 |
 | `--max-sessions` | 最多選取的主 session 數（預設 40） |
-| `--max-chars` | 單一對話紀錄上限字元數（預設 40000，超過時保留頭 60%＋尾 40%） |
+| `--max-chars` | 單一對話紀錄上限字元數（預設 40000）。超過時主 session 與每個子 session 各自依長度分配額度並有保底，每段以整行保留開頭約 60%、結尾約 40%，被省略段落中的錯誤行列在省略標記後；保底內容優先，結果可能略超過上限 |
 | `--label` | 暫存輸出目錄的名稱前綴 |
 | `--out` | 指定輸出目錄（必須是新的或空的目錄） |
 
-最後一行 stdout 是 JSON，`out` 為輸出目錄，內含 `meta.json`、`slices.json` 與 `transcripts/`。`meta.json` 的 `stats.sessions_by_directory` 列出各目錄選入數，`rule_files` 列出全域與每個選入 session 所屬專案的 `AGENTS.md`／`CLAUDE.md`。`transcripts/` 含對話內容，用完即可刪除。
+最後一行 stdout 是 JSON，`out` 為輸出目錄，內含 `meta.json`、`slices.json` 與 `transcripts/`。`meta.json` 的 `stats.sessions_by_directory` 列出各目錄選入數，`totals.agents` 依 agent 類型列出 session 數、子 session 數、工具呼叫、工具失敗、回應錯誤與疑似撞到步數上限的次數（`totals.step_limit_suspected` 為總數；只在子 session 偵測，對話紀錄中該子 session 標題會加註），`rule_files` 列出全域與每個選入 session 所屬專案的 `AGENTS.md`／`CLAUDE.md`。`transcripts/` 含對話內容，用完即可刪除。
 
 執行測試：
 
@@ -140,7 +140,8 @@ pstack 作者為 [poteto](https://github.com/poteto)（Cursor，MIT）。上游�
 |---|---|---|
 | 資料來源 | `opencode api` 的 `/api/session/{id}/context` | 直接唯讀讀取 OpenCode 資料庫 |
 | 壓縮前的訊息 | 讀不到（只回最後一次壓縮之後的內容） | 讀得到 |
-| 子 session | 不處理 | 併入主 session |
+| 子 session | 不處理 | 併入主 session；截斷時每個子 session 各自保留開頭、錯誤與結尾 |
+| subagent 統計 | 無 | 依 agent 類型統計呼叫與失敗，偵測疑似撞到步數上限 |
 | 跨 session 分段 | 無 | `slices.json` 依字元數分段，6 個以上 session 至少 3 段 |
 | 統計 | 無 | 工具呼叫數、錯誤率、錯誤後重試、skill 使用次數 |
 | 遮蔽 | 密碼、`Password=`、`Bearer`、`sqlcmd -P` | 另含 `-P`／`--password` 參數、JWT、常見 token 前綴、email、手機、身分證號 |
@@ -151,7 +152,7 @@ pstack 作者為 [poteto](https://github.com/poteto)（Cursor，MIT）。上游�
 
 ### 單元測試
 
-`python -I -m unittest discover -s recall/scripts -p "test_*.py"` → 16 個測試全部通過：子 session 併入、目錄篩選、多個 `--directory`、`--balance-projects` 輪流選取（含未加時的對照）、時間窗、錯誤後重試、敏感資訊遮蔽（含命令列密碼）、唯讀開啟、排除 session 與 skill、預設不排除 skill、`--session` 略過篩選與找不到的 ID、`--label` 前綴、長回覆保留頭尾、分段涵蓋、無 session 仍輸出 `meta.json`。
+`python -I -m unittest discover -s recall/scripts -p "test_*.py"` → 19 個測試全部通過：子 session 併入、截斷時保留每個子 session、省略段落的錯誤行集中列出、依 agent 統計與步數上限偵測（主 session 轉述不重複計數）、目錄篩選、多個 `--directory`、`--balance-projects` 輪流選取（含未加時的對照）、時間窗、錯誤後重試、敏感資訊遮蔽（含命令列密碼）、唯讀開啟、排除 session 與 skill、預設不排除 skill、`--session` 略過篩選與找不到的 ID、`--label` 前綴、長回覆保留頭尾、分段涵蓋、無 session 仍輸出 `meta.json`。
 
 ### 模擬 `skills add` 安裝後執行
 
@@ -172,6 +173,16 @@ pstack 作者為 [poteto](https://github.com/poteto)（Cursor，MIT）。上游�
 | `--all-projects` | 293 | 40 | 8 | 6 | 最多的單一目錄 18 個 |
 | `--all-projects --balance-projects` | 293 | 40 | 20 | 12 | 每個目錄最多 4 個 |
 | 兩個 `--directory`（專案目錄＋同層的規格庫） | 61 | 40 | 6 | 5 | 同層規格庫的 session 有納入 |
+
+### 子 session 保留與 agent 統計（真實資料，近 14 天，40 個主 session、60 個子 session）
+
+| 項目 | 舊版（整份切頭尾） | 新版（每段各自保留） |
+|---|---|---|
+| 對話紀錄中保留的子 session 段落 | 21／60 | 60／60 |
+| 省略段落中集中列出錯誤的區塊 | 無 | 16 處 |
+| 最長的對話紀錄 | — | 65,821 字（上限 40,000；保底內容優先） |
+| 疑似撞到步數上限 | 無 | 20 次，全部在子 session；抽樣確認皆為 subagent 自述「已達最大執行步數」 |
+| 未遮蔽的密碼 | 0 | 0 |
 
 ### 從 GitHub 實際安裝
 
