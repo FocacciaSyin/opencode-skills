@@ -16,7 +16,7 @@ primary 派送 subagent 時，把 `{…}` 換成實際值後整段送出。
 
 步驟：
 
-1. 先讀 signals.md，再逐一讀完每個對話紀錄，依訊號定義記下發現。
+1. 先讀 signals.md，再逐一讀完每個對話紀錄，依訊號定義記下發現。子 session 段落（`## 子 session`）也要讀，標題帶「（疑似撞到步數上限）」的優先確認原因。
 2. 同一模式在本分段內出現多次時，合併成一筆，並列出所有證據。
 3. 每筆發現都要能指出證據位置（session ID 與訊息序號）。證據只寫摘要，不貼原文，不寫客戶個資。
 4. 本分段最多回報 15 筆，優先回報出現次數多、對未來行為影響大的發現。
@@ -31,7 +31,7 @@ primary 派送 subagent 時，把 `{…}` 換成實際值後整段送出。
   "sessions_read": ["ses_..."],
   "findings": [
     {
-      "signal": "correction | repeated-context | tool-friction | missed-skill | rule-drift | wasted-work | works-well",
+      "signal": "correction | repeated-context | tool-friction | missed-skill | rule-drift | subagent | wasted-work | works-well",
       "summary": "一句話描述模式",
       "evidence": [{"session": "ses_...", "seq": 12, "note": "這一處發生了什麼"}],
       "target": "AGENTS.md | skill:<id> | enforcement | unknown",

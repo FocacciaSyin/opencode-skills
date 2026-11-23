@@ -105,7 +105,7 @@ python -I "<recall 目錄>/scripts/extract_sessions.py" --directory "<專案目�
 1. 每個 Accepted 項目：把目標檔複製到 `REPORT_DIR/proposed/<編號>-<原檔名>`，只修改副本，用 `git diff --no-index --output=REPORT_DIR/proposed/<編號>.diff <原檔> <副本>` 產生 diff。
 2. 寫 `REPORT_DIR/report.md`：
    - **範圍**：期間、目錄或全部專案、session 數、分段數、各目錄選入數（`sessions_by_directory`）。
-   - **統計重點**：錯誤率最高的工具、錯誤後重試次數、前幾名錯誤訊息、使用者手動指定 skill 的次數。
+   - **統計重點**：錯誤率最高的工具、錯誤後重試次數、前幾名錯誤訊息、使用者手動指定 skill 的次數、各類 agent 的子 session 數與失敗數、疑似撞到步數上限的次數（`totals.agents`、`totals.step_limit_suspected`）。
    - **Accepted**：每項包含訊號、目標檔、證據（session ID#seq，共幾個 session、幾個分段）、修改摘要與 diff 路徑。
    - **Backlog**：每項包含問題、證據與建議的強制手段。
    - **Rejected**：每項包含問題與理由。

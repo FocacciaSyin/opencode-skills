@@ -34,7 +34,8 @@ python -I "<recall 目錄>/scripts/extract_sessions.py" --directory "<目前工�
 - `sessions_selected` 為 0 時，回報範圍內沒有 session，建議加大 `--days`，然後結束。
 - 有指定主題時，先依 `meta.json` 的 `sessions[].title` 與對話紀錄內容篩出相關 session；篩除的數量寫進輸出。
 - 相關 session ≤ 2 個時直接讀 `OUT/transcripts/`。超過 2 個時派 subagent 在背景平行讀取：未指定主題時依 `OUT/slices.json` 每個分段各派一個；有指定主題時，`slices.json` 含被篩除的 session，改把篩出的對話紀錄依字元數分組（每組約 25 萬字以內），每組各派一個。每個 subagent 只回傳結構化摘要（每個 session 的目標、做了什麼、結論、未完成事項、提到的分支／PR／commit，並附 session ID 與訊息序號），原始對話留在 subagent。
-- 對話紀錄含「中間省略」時，代表被截斷，在輸出標示「資料缺口」，不要推測被省略的內容。
+- 對話紀錄含「中間省略」時，代表被截斷，在輸出標示「資料缺口」，不要推測被省略的內容。截斷時每個子 session 都會保留開頭、錯誤與結尾，被省略段落中的錯誤行列在省略標記後。
+- 子 session 標題帶「（疑似撞到步數上限）」時，該 subagent 被迫停止，它的結論只代表已完成的部分，列在 Problems 或未完成事項。
 
 ## 3. 掃描共享紀錄（有指定主題時必做）
 

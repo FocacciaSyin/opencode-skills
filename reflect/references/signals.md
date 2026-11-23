@@ -36,6 +36,13 @@ agent 做了 `AGENTS.md` 或某個 skill 已明文禁止或要求的事，例如
 
 - 判斷：先找到被違反的那一條規則並引用位置。規則寫得含糊時，改寫措辭。規則寫得清楚卻仍被違反時，代表沒有機制強制執行，放 Backlog，註明可用的強制手段，例如權限設定、hook 或 script 檢查。
 
+## subagent：委派問題
+
+子 session（subagent）撞到步數上限而被迫停止、交辦範圍過大、回報不完整卻被 primary 當成完成，或同一件事被重複委派。對話紀錄中子 session 標題帶「（疑似撞到步數上限）」的是起點；`meta.json` 的 `totals.agents` 列出各類 agent 的子 session 數、工具呼叫、失敗與疑似撞到上限的次數，`totals.step_limit_suspected` 是總數。
+
+- 判斷：同一類 agent 反覆撞到上限時，找出原因，例如一次交辦太多題、範圍沒切片、缺少可直接使用的前置資訊（連線、路徑）而浪費步數。要回到子 session 段落確認它把步數花在哪裡。
+- 去處：調整委派方式寫進 `AGENTS.md` 或相關 skill（例如每次只交辦一個主要假設）；需要調整步數上限或 agent 權限的放 Backlog。
+
 ## wasted-work：白工
 
 重複讀同一批檔案、subagent 重做 primary 已完成的查詢、使用者中斷（`Step interrupted`、`Tool execution interrupted`）後重做、方案被否決後大幅返工，或因 context 壓縮（COMPACT）而遺失進度。
