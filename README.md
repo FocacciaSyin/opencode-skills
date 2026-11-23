@@ -10,7 +10,7 @@
 | Skill | 用途 |
 |---|---|
 | `recall` | 跨多個 session 重建某主題的工作脈絡，輸出 Capsule／Threads／Problems／Next move |
-| `reflect` | 單次模式：從本次對話提煉教訓；跨 session 模式：掃描近期 session 找出重複糾正、工具卡點與 skill 漏觸發。兩者都產出 Accepted／Backlog／Rejected 與修改 diff，核准後才改檔 |
+| `reflect` | 單次模式：從本次對話提煉教訓；跨 session 模式：預設掃描全部專案的近期 session（依目錄平均抽樣），找出重複糾正、工具卡點與 skill 漏觸發。兩者都產出 Accepted／Backlog／Rejected 與修改 diff，核准後才改檔 |
 | `session-pickup` | 接手未完成的 session／分支，分出「有實際證據的已完成」與「只是宣稱完成」，找出續做點 |
 
 三個 skill 都設定 `disable-model-invocation: true`，只在使用者以 `/recall`、`/reflect`、`/session-pickup` 或 `@skill-id` 呼叫時載入。
@@ -81,14 +81,18 @@ python -I "$S" --days 7 --label recall --exclude-skill recall
 # 指定 session（子 session 會換成主 session），不截斷
 python -I "$S" --session ses_abc123 --max-chars 400000 --label session-pickup
 
-# 跨專案、指定起始日
-python -I "$S" --all-projects --since 2026-11-01 --label reflect --exclude-skill reflect
+# 跨專案、依目錄平均抽樣、指定起始日
+python -I "$S" --all-projects --balance-projects --since 2026-11-01 --label reflect --exclude-skill reflect
+
+# 同一主題分散在多個同層 repo
+python -I "$S" --directory ~/work/app --directory ~/work/app-specs --days 7 --label recall
 ```
 
 | 參數 | 說明 |
 |---|---|
-| `--directory` | 只取此目錄底下的 session（預設目前目錄） |
+| `--directory` | 只取此目錄底下的 session，可重複指定多個目錄（預設目前目錄） |
 | `--all-projects` | 不依目錄篩選 |
+| `--balance-projects` | 依 session 目錄分組輪流選取（各組由新到舊），避免單一專案佔滿 `--max-sessions`；分組以 session 開啟時的完整目錄為準，子目錄與 worktree 各自成組 |
 | `--days`／`--since` | 時間窗（預設 14 天；`--since` 優先） |
 | `--session` | 只取指定 session，可重複；忽略時間窗、目錄與排除條件 |
 | `--exclude-skill` | 排除載入或呼叫過該 skill 的 session，可重複 |
@@ -98,7 +102,7 @@ python -I "$S" --all-projects --since 2026-11-01 --label reflect --exclude-skill
 | `--label` | 暫存輸出目錄的名稱前綴 |
 | `--out` | 指定輸出目錄（必須是新的或空的目錄） |
 
-最後一行 stdout 是 JSON，`out` 為輸出目錄，內含 `meta.json`、`slices.json` 與 `transcripts/`。`transcripts/` 含對話內容，用完即可刪除。
+最後一行 stdout 是 JSON，`out` 為輸出目錄，內含 `meta.json`、`slices.json` 與 `transcripts/`。`meta.json` 的 `stats.sessions_by_directory` 列出各目錄選入數，`rule_files` 列出全域與每個選入 session 所屬專案的 `AGENTS.md`／`CLAUDE.md`。`transcripts/` 含對話內容，用完即可刪除。
 
 執行測試：
 
@@ -147,7 +151,7 @@ pstack 作者為 [poteto](https://github.com/poteto)（Cursor，MIT）。上游�
 
 ### 單元測試
 
-`python -I -m unittest discover -s recall/scripts -p "test_*.py"` → 14 個測試全部通過：子 session 併入、目錄篩選、時間窗、錯誤後重試、敏感資訊遮蔽（含命令列密碼）、唯讀開啟、排除 session 與 skill、預設不排除 skill、`--session` 略過篩選與找不到的 ID、`--label` 前綴、長回覆保留頭尾、分段涵蓋、無 session 仍輸出 `meta.json`。
+`python -I -m unittest discover -s recall/scripts -p "test_*.py"` → 16 個測試全部通過：子 session 併入、目錄篩選、多個 `--directory`、`--balance-projects` 輪流選取（含未加時的對照）、時間窗、錯誤後重試、敏感資訊遮蔽（含命令列密碼）、唯讀開啟、排除 session 與 skill、預設不排除 skill、`--session` 略過篩選與找不到的 ID、`--label` 前綴、長回覆保留頭尾、分段涵蓋、無 session 仍輸出 `meta.json`。
 
 ### 模擬 `skills add` 安裝後執行
 
@@ -160,6 +164,14 @@ pstack 作者為 [poteto](https://github.com/poteto)（Cursor，MIT）。上游�
 | `--session` 不存在的 ID | ✅ 列在 `sessions_not_found`，不吐 stack trace |
 | 不帶參數 | ✅ 使用預設值（目前目錄、14 天） |
 | `--out` 指向非空目錄 | ✅ 回傳錯誤 JSON，exit 2 |
+
+### 跨專案平均抽樣與多目錄（真實資料，近 14 天）
+
+| 情境 | 範圍內 | 選取 | 涵蓋目錄數 | 規則檔數 | 分布 |
+|---|---|---|---|---|---|
+| `--all-projects` | 293 | 40 | 8 | 6 | 最多的單一目錄 18 個 |
+| `--all-projects --balance-projects` | 293 | 40 | 20 | 12 | 每個目錄最多 4 個 |
+| 兩個 `--directory`（專案目錄＋同層的規格庫） | 61 | 40 | 6 | 5 | 同層規格庫的 session 有納入 |
 
 ### 從 GitHub 實際安裝
 
