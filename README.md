@@ -161,6 +161,21 @@ pstack 作者為 [poteto](https://github.com/poteto)（Cursor，MIT）。上游�
 | 不帶參數 | ✅ 使用預設值（目前目錄、14 天） |
 | `--out` 指向非空目錄 | ✅ 回傳錯誤 JSON，exit 2 |
 
+### 從 GitHub 實際安裝
+
+在乾淨的暫存專案執行：
+
+```bash
+npx skills add FocacciaSyin/opencode-skills -a opencode -y
+```
+
+| 檢查 | 結果 |
+|---|---|
+| 安裝的 skill | ✅ `recall`、`reflect`、`session-pickup` 三個都安裝到 `.agents/skills/` |
+| 支援檔案 | ✅ `recall/scripts/`（`extract_sessions.py`、`test_extract_sessions.py`）與 `reflect/references/`（`miner-prompt.md`、`signals.md`）都正確複製 |
+| 單元測試（從安裝位置執行） | ✅ 14 個測試全部通過 |
+| `--session` 不存在的 ID | ✅ 列在 `sessions_not_found` |
+
 ### 用真實 session 跑完整流程
 
 以作者本機的同流程版本執行（差別只在 PR 平台與專案驗證流程寫成具體工具名稱）；本 repo 的通用版步驟相同。
@@ -186,7 +201,6 @@ pstack 作者為 [poteto](https://github.com/poteto)（Cursor，MIT）。上游�
 ### 已知未驗
 
 - macOS／Linux 實機（本次只測 Windows 11）
-- 以 `npx skills add FocacciaSyin/opencode-skills` 從 GitHub 實際安裝新版（本次以複製資料夾模擬）
 - 方式一（`skills` 陣列）的實際註冊結果（依官方文件撰寫）
 
 ## 注意
