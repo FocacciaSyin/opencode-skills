@@ -16,7 +16,7 @@ disable-model-invocation: true
 
 - **時間窗**：預設近 7 天；使用者說「最近」時換算成實際天數。
 - **主題**：使用者有指定時記下關鍵字與相關識別字（分支名、PR 編號、功能名稱）。
-- **目錄**：預設目前工作目錄，不跨到別的專案。
+- **目錄**：預設目前工作目錄（含子目錄），不跨到別的專案。同一個主題的工作分散在同層的相關 repo（例如規格庫、migration repo、另一個 clone）時，把這些目錄一併列入範圍；不在目前目錄底下的 session 不會自動納入。
 
 把範圍用一句話講回給使用者，然後直接開始查，不等確認。
 
@@ -25,8 +25,10 @@ disable-model-invocation: true
 `<recall 目錄>` 是本 skill 所在的資料夾：全域 clone 安裝為 `~/.config/opencode/skills/recall`，`npx skills add` 安裝為專案內的 `.agents/skills/recall`。macOS／Linux 的 Python 指令可能是 `python3`。
 
 ```
-python -I "<recall 目錄>/scripts/extract_sessions.py" --directory "<目前工作目錄>" --days <N> --label recall --exclude-skill recall
+python -I "<recall 目錄>/scripts/extract_sessions.py" --directory "<目前工作目錄>" [--directory "<同層相關 repo>"] --days <N> --label recall --exclude-skill recall
 ```
+
+- `--directory` 可重複，任一目錄底下的 session 都會納入；`meta.json` 的 `stats.sessions_by_directory` 列出各目錄選入數。
 
 - 腳本唯讀讀取 `~/.local/share/opencode/opencode.db`，壓縮前的內容與子 session 都會納入，並自動排除目前 session（環境變數 `OPENCODE_SESSION_ID`）。最後一行 stdout 的 `out` 是輸出目錄（以下稱 `OUT`）。
 - `sessions_selected` 為 0 時，回報範圍內沒有 session，建議加大 `--days`，然後結束。

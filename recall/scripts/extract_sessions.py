@@ -336,6 +336,21 @@ def iter_messages(conn, session_id: str):
     )
 
 
+def balance_by_directory(candidates: list[tuple], sessions: dict) -> list[tuple]:
+    """依主 session 的目錄分組後輪流取出：每輪各組取最新一筆，組的順序依其最新 session 由新到舊。"""
+    groups: dict[str, list[tuple]] = collections.OrderedDict()
+    for cand in candidates:  # candidates 已由新到舊排序
+        key = norm_dir(sessions[cand[1]].get("directory") or "")
+        groups.setdefault(key, []).append(cand)
+    ordered, depth = [], 0
+    while len(ordered) < len(candidates):
+        for items in groups.values():
+            if depth < len(items):
+                ordered.append(items[depth])
+        depth += 1
+    return ordered
+
+
 def cap_transcript(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
@@ -388,8 +403,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="只取指定的 session（可重複）；子 session 會換成所屬的主 session。指定時忽略時間窗、目錄、--max-sessions 與所有排除條件",
     )
     p.add_argument("--exclude-skill", action="append", default=[], help="排除載入或呼叫過此 skill 的 session，可重複")
-    p.add_argument("--directory", default=os.getcwd(), help="只取此目錄底下的 session（預設目前目錄）")
+    p.add_argument(
+        "--directory",
+        action="append",
+        default=[],
+        help="只取此目錄底下的 session，可重複指定多個目錄（預設目前目錄）",
+    )
     p.add_argument("--all-projects", action="store_true", help="不依目錄篩選，納入所有專案")
+    p.add_argument(
+        "--balance-projects",
+        action="store_true",
+        help="依 session 目錄分組輪流選取（各組由新到舊），避免單一專案佔滿 --max-sessions",
+    )
     p.add_argument("--days", type=float, default=14, help="回溯天數（預設 14）")
     p.add_argument("--since", help="起始時間（ISO 格式，如 2026-11-01）；指定時覆蓋 --days")
     p.add_argument("--max-sessions", type=int, default=40, help="最多選取的根 session 數（預設 40）")
@@ -425,7 +450,8 @@ def main(argv=None) -> int:
         since_ms = int(datetime.fromisoformat(args.since).timestamp() * 1000)
     else:
         since_ms = int(time.time() * 1000 - args.days * DAY_MS)
-    base_dir = norm_dir(args.directory)
+    directories = args.directory or [os.getcwd()]
+    base_dirs = [norm_dir(d) for d in directories]
     excluded = set(args.exclude_session)
     env_sid = os.environ.get("OPENCODE_SESSION_ID")
     if env_sid and not args.no_env_exclude:
@@ -476,13 +502,15 @@ def main(argv=None) -> int:
             for s in sessions.values():
                 if s["parent_id"] and s["parent_id"] in sessions:
                     continue
-                if not args.all_projects and not is_under(s["directory"], base_dir):
+                if not args.all_projects and not any(is_under(s["directory"], b) for b in base_dirs):
                     continue
                 ids = tree(s["id"])
                 last = max(sessions[i]["time_updated"] or 0 for i in ids)
                 if last >= since_ms:
                     candidates.append((last, s["id"], ids))
         candidates.sort(reverse=True)
+        if args.balance_projects and not explicit:
+            candidates = balance_by_directory(candidates, sessions)
 
         stats = collections.Counter(sessions_in_window=len(candidates))
         selected = []
@@ -568,7 +596,12 @@ def main(argv=None) -> int:
         )
 
     slices = make_slices(records, args.slice_budget)
-    skill_index = index_skills(discover_skill_sources(args.directory, args.skills_dir))
+    skill_index = index_skills(discover_skill_sources(directories[0], args.skills_dir))
+    # 規則檔涵蓋指定目錄與每個選入 session 的目錄（跨專案分析時各專案的 AGENTS.md 都要列出）
+    rule_files = list(dict.fromkeys(
+        f for d in [*directories, *(r["directory"] for r in records if r["directory"])] for f in discover_rule_files(d)
+    ))
+    by_directory = collections.Counter(r["directory"] for r in records)
     used_ids = set(totals["skills_loaded"]) | set(totals["skills_mentioned"])
     error_rate = {
         name: round(totals["tool_errors"][name] / calls, 3)
@@ -579,8 +612,9 @@ def main(argv=None) -> int:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "params": {
             "db": str(db),
-            "directory": None if args.all_projects else args.directory,
+            "directory": None if args.all_projects else directories,
             "all_projects": args.all_projects,
+            "balance_projects": args.balance_projects,
             "since": None if explicit else datetime.fromtimestamp(since_ms / 1000).isoformat(timespec="seconds"),
             "max_sessions": args.max_sessions,
             "sessions": explicit,
@@ -592,6 +626,7 @@ def main(argv=None) -> int:
             "sessions_excluded": stats["sessions_excluded"],
             "sessions_skipped_skill": stats["sessions_skipped_skill"],
             "sessions_not_found": not_found,
+            "sessions_by_directory": dict(by_directory.most_common()),
             "slices": len(slices),
         },
         "totals": {
@@ -607,7 +642,7 @@ def main(argv=None) -> int:
         },
         "skills_used": [{"id": sid, "path": skill_index.get(sid)} for sid in sorted(used_ids)],
         "skills_installed": len(skill_index),
-        "rule_files": discover_rule_files(args.directory),
+        "rule_files": rule_files,
         "sessions": records,
     }
     (out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")

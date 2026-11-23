@@ -26,7 +26,7 @@ disable-model-invocation: true
 
   可重複帶 `--session`；子 session 會換成所屬的主 session。`--max-chars 400000` 避免對話紀錄被截斷。最後一行 stdout 的 `out` 是輸出目錄，讀 `meta.json` 與 `transcripts/`。`sessions_not_found` 不為空時，告訴使用者哪些 ID 找不到。
 - **交接文件**：讀使用者給的路徑；文件引用的 spec、PR、commit 依引用去讀，不重複整理。
-- **分支或 PR 編號**：先做第 2 步取得分支，再用 `--directory <工作樹> --days 7 --label session-pickup --exclude-skill session-pickup` 擷取，找出提到該分支或 PR 的 session。
+- **分支或 PR 編號**：先做第 2 步取得分支，再用 `--directory <工作樹> --days 7 --label session-pickup --exclude-skill session-pickup` 擷取，找出提到該分支或 PR 的 session。工作可能在主 clone 與其他 worktree 之間切換時，`--directory` 可重複，把這些路徑都帶入。
 - **都沒有**：用 `--directory <目前工作目錄> --days 3 --label session-pickup --exclude-skill session-pickup` 列出最近的 session，挑最接近的一個，並告訴使用者挑了哪個。
 - 對話紀錄超過約 5 萬字時，派一個 subagent 在背景讀完整紀錄，回傳第 2～4 步需要的資訊：目標與停止點、工作位置（repo、工作樹、分支、commit、PR）、宣稱完成的事項與證據位置、決策與被否決的方案、未完成事項、建議重驗的一項。原始紀錄留在 subagent。
 

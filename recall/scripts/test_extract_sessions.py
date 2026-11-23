@@ -129,6 +129,39 @@ class ExtractSessionsTest(unittest.TestCase):
         meta2 = json.loads((out2 / "meta.json").read_text(encoding="utf-8"))
         self.assertCountEqual(self.selected_ids(meta2), ["ses_a", "ses_b"])
 
+    # --directory 可重複指定：任一目錄底下的 session 都納入，其餘目錄不納入。
+    def test_multiple_directories(self):
+        third = os.path.normpath("D:/work/proj-c")
+        self.fx.session("ses_a", directory=PROJECT)
+        self.fx.session("ses_b", directory=os.path.join(OTHER_PROJECT, "sub"))
+        self.fx.session("ses_c", directory=third)
+        for sid in ("ses_a", "ses_b", "ses_c"):
+            self.fx.user(sid, sid)
+        meta = self.run_extract("--directory", OTHER_PROJECT)
+        self.assertCountEqual(self.selected_ids(meta), ["ses_a", "ses_b"])
+        self.assertEqual(meta["params"]["directory"], [PROJECT, OTHER_PROJECT])
+
+    # --balance-projects 依目錄輪流選取：上限 3 時，較舊的 B 專案仍至少選入 1 個；未加時只取最新的 A 專案。
+    def test_balance_projects_round_robin(self):
+        for i in range(5):
+            self.fx.session(f"ses_a{i}", directory=PROJECT, age_days=1 + i * 0.1)
+        for i in range(2):
+            self.fx.session(f"ses_b{i}", directory=OTHER_PROJECT, age_days=3 + i * 0.1)
+        self.fx.close()
+        base = ["--db", str(self.fx.path), "--all-projects", "--no-env-exclude", "--max-sessions", "3"]
+
+        out_plain = self.root / "plain"
+        self.assertEqual(es.main([*base, "--out", str(out_plain)]), 0)
+        plain = json.loads((out_plain / "meta.json").read_text(encoding="utf-8"))
+        self.assertCountEqual(self.selected_ids(plain), ["ses_a0", "ses_a1", "ses_a2"])
+
+        out_bal = self.root / "balanced"
+        self.assertEqual(es.main([*base, "--balance-projects", "--out", str(out_bal)]), 0)
+        bal = json.loads((out_bal / "meta.json").read_text(encoding="utf-8"))
+        self.assertCountEqual(self.selected_ids(bal), ["ses_a0", "ses_a1", "ses_b0"])
+        self.assertEqual(bal["stats"]["sessions_by_directory"], {PROJECT: 2, OTHER_PROJECT: 1})
+        self.assertTrue(bal["params"]["balance_projects"])
+
     # 超過 --days 時間窗的 session 不納入。
     def test_time_window_excludes_old_sessions(self):
         self.fx.session("ses_new", age_days=1)
