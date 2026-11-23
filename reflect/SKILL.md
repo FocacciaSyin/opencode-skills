@@ -19,7 +19,7 @@ disable-model-invocation: true
 | 呼叫方式 | 模式 | 範圍 |
 | --- | --- | --- |
 | `/reflect`（未帶範圍參數） | 單次模式 | 只看本次對話 |
-| `/reflect --days N`、`--since YYYY-MM-DD`、`--all-projects` | 跨 session 模式 | 本機歷史 session（預設目前目錄、最近 14 天） |
+| `/reflect --days N`、`--since YYYY-MM-DD`、`--directory <路徑>` | 跨 session 模式 | 本機歷史 session（預設全部專案、依目錄平均抽樣、最近 14 天；帶 `--directory` 時只看指定專案） |
 
 使用者沒帶參數但描述的是「最近幾週」「這陣子」等期間時，改用跨 session 模式，並把換算出的天數講回給使用者。
 
@@ -68,12 +68,17 @@ disable-model-invocation: true
 ### 1. 擷取 session
 
 ```
-python -I "<recall 目錄>/scripts/extract_sessions.py" --directory "<目前工作目錄>" [--days N | --since YYYY-MM-DD] [--all-projects] --label reflect --exclude-skill reflect
+# 預設：全部專案，依目錄平均抽樣
+python -I "<recall 目錄>/scripts/extract_sessions.py" --all-projects --balance-projects [--days N | --since YYYY-MM-DD] --label reflect --exclude-skill reflect
+
+# 使用者指定專案時：只看指定目錄（可重複）
+python -I "<recall 目錄>/scripts/extract_sessions.py" --directory "<專案目錄>" [--directory "<另一個目錄>"] [--days N | --since YYYY-MM-DD] --label reflect --exclude-skill reflect
 ```
 
+- agent 的行為問題（糾正、工具卡點、違反規則）多半跨專案通用，所以預設看全部專案。`--balance-projects` 依 session 目錄分組輪流選取，避免單一專案佔滿 `--max-sessions`（預設 40）；選取結果的分布見 `meta.json` 的 `stats.sessions_by_directory`。
 - 腳本以唯讀模式讀取 `~/.local/share/opencode/opencode.db`，自動排除目前 session 與載入過 reflect 的 session，並把子 session 併入主 session。
 - 最後一行 stdout 是 JSON，其中 `out` 是本次的輸出目錄，以下稱 `REPORT_DIR`。目錄內有 `meta.json`、`slices.json`、`transcripts/`。
-- `sessions_selected` 為 0 時，告訴使用者範圍內沒有可分析的 session，建議加大 `--days` 或改用 `--all-projects`，然後結束。
+- `sessions_selected` 為 0 時，告訴使用者範圍內沒有可分析的 session，建議加大 `--days`，然後結束。
 
 完成條件：`REPORT_DIR/meta.json` 與 `slices.json` 都存在，且已讀過 `meta.json` 的 `stats` 與 `totals`。
 
@@ -91,7 +96,7 @@ python -I "<recall 目錄>/scripts/extract_sessions.py" --directory "<目前工�
 1. 合併所有 findings，把描述同一模式的發現併成一筆，證據合併計算。
 2. 證據涵蓋 2 個以上 session 的才保留；只出現在單一 session 的放 Rejected，理由寫「偶發」。證據跨 2 個以上分段的，標為高信心。
 3. 每筆保留的發現至少回到 1 處引用的對話紀錄核對原因，確認 subagent 沒有誤讀。
-4. 讀取目標檔案再依共通規則分類。`AGENTS.md` 路徑見 `meta.json` 的 `rule_files`，skill 路徑見 `skills_used`。
+4. 讀取目標檔案再依共通規則分類。`AGENTS.md` 路徑見 `meta.json` 的 `rule_files`（含全域與每個選入 session 所屬專案的規則檔），skill 路徑見 `skills_used`。只在單一專案出現的模式，落地點優先選該專案的規則檔，不放全域。
 
 完成條件：每筆發現都已歸入 Accepted、Backlog 或 Rejected 其中一類，且都有理由。
 
@@ -99,7 +104,7 @@ python -I "<recall 目錄>/scripts/extract_sessions.py" --directory "<目前工�
 
 1. 每個 Accepted 項目：把目標檔複製到 `REPORT_DIR/proposed/<編號>-<原檔名>`，只修改副本，用 `git diff --no-index --output=REPORT_DIR/proposed/<編號>.diff <原檔> <副本>` 產生 diff。
 2. 寫 `REPORT_DIR/report.md`：
-   - **範圍**：期間、目錄、session 數、分段數。
+   - **範圍**：期間、目錄或全部專案、session 數、分段數、各目錄選入數（`sessions_by_directory`）。
    - **統計重點**：錯誤率最高的工具、錯誤後重試次數、前幾名錯誤訊息、使用者手動指定 skill 的次數。
    - **Accepted**：每項包含訊號、目標檔、證據（session ID#seq，共幾個 session、幾個分段）、修改摘要與 diff 路徑。
    - **Backlog**：每項包含問題、證據與建議的強制手段。
