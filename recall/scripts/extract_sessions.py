@@ -50,6 +50,14 @@ REDACTIONS = [
     (re.compile(r"(?<![A-Za-z0-9])[A-Z][12]\d{8}(?![A-Za-z0-9])"), "[ID]"),
 ]
 
+# 截斷對話紀錄時每個 session 段落至少分到的字元數，以及省略段落中最多列出的錯誤行數
+MIN_SECTION_CHARS = 1500
+MIN_SECTION_FLOOR = 400
+MAX_OMITTED_ERRORS = 30
+
+# 疑似撞到步數上限的訊息（subagent 被迫停止時常見的說法）
+STEP_LIMIT_RE = re.compile(r"(?i)\b(?:max(?:imum)?\s+(?:number\s+of\s+)?steps|step\s+limit)\b|最大(?:執行)?步數|步數上限")
+
 # 工具輸入摘要時優先擷取的欄位
 INPUT_KEYS = ["command", "path", "filePath", "pattern", "id", "agent", "description", "url", "query", "code"]
 
@@ -227,7 +235,11 @@ class SessionAccumulator:
 
     def __init__(self, exclude_skills: frozenset[str] = frozenset()):
         self.exclude_skills = exclude_skills
+        # 每個 session（主與子）一段，截斷時各段分別保留開頭、錯誤與結尾
+        self.sections: list[dict] = []
         self.lines: list[str] = []
+        self.agent = "?"
+        self.agents: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
         self.tool_calls = collections.Counter()
         self.tool_errors = collections.Counter()
         self.retry_after_error = collections.Counter()
@@ -237,13 +249,27 @@ class SessionAccumulator:
         self.counts = collections.Counter()
         self.loaded_self = False
 
-    def add_session(self, sess: dict, messages: list[tuple], is_root: bool):
-        header = "## 主 session" if is_root else "## 子 session"
-        self.lines.append(f"\n{header} {sess['id']}（agent={sess.get('agent') or '?'}）\n")
+    def add_session(self, sess: dict, messages, is_root: bool):
+        self.agent = sess.get("agent") or "?"
+        section = {"id": sess["id"], "agent": self.agent, "is_root": is_root, "lines": [], "step_limit": False}
+        self.sections.append(section)
+        self.lines = section["lines"]
+        stats = self.agents[self.agent]
+        stats["sessions"] += 1
+        if not is_root:
+            stats["child_sessions"] += 1
         prev_tool = None
         for seq, mtype, data in messages:
             obj = parse_json(data) or {}
             prev_tool = self._render(seq, mtype, obj, prev_tool)
+        if section["step_limit"]:
+            stats["step_limit_suspected"] += 1
+
+    def _check_step_limit(self, text: str):
+        # 只在子 session 偵測：subagent 的回報會以系統訊息轉貼回主 session，在主 session 偵測會重複計數
+        section = self.sections[-1]
+        if not section["is_root"] and text and STEP_LIMIT_RE.search(text):
+            section["step_limit"] = True
 
     def _render(self, seq, mtype, obj, prev_tool):
         add = self.lines.append
@@ -264,12 +290,15 @@ class SessionAccumulator:
             for item in obj.get("content") or []:
                 kind = item.get("type")
                 if kind == "text" and item.get("text"):
+                    self._check_step_limit(item["text"])
                     add(f"[A#{seq}] {clip_ends(item['text'], LIMIT_ASSISTANT_HEAD, LIMIT_ASSISTANT_TAIL)}")
                 elif kind == "tool":
                     prev_tool = self._tool(seq, item, prev_tool)
             if obj.get("error"):
                 self.counts["assistant_errors"] += 1
+                self.agents[self.agent]["assistant_errors"] += 1
                 msg = error_text(obj["error"])
+                self._check_step_limit(msg)
                 self.errors.append(("(assistant)", msg))
                 add(f"[A#{seq}] !! assistant error: {clip(msg, LIMIT_TOOL_ERROR)}")
         elif mtype == "skill":
@@ -289,6 +318,7 @@ class SessionAccumulator:
             add(f"[COMPACT#{seq}] reason={obj.get('reason') or '?'}")
         elif mtype == "synthetic":
             text = obj.get("text") or obj.get("description") or ""
+            self._check_step_limit(text)
             # system-reminder 多為模式提示等固定文字，只保留開頭以節省分析篇幅
             limit = 160 if text.lstrip().startswith("<system-reminder>") else LIMIT_SYNTHETIC
             add(f"[SYN#{seq}] {clip(text, limit)}")
@@ -310,6 +340,7 @@ class SessionAccumulator:
         status = state.get("status") or "?"
         inp = state.get("input")
         self.tool_calls[name] += 1
+        self.agents[self.agent]["tool_calls"] += 1
         if name == "subagent":
             self.counts["subagent_calls"] += 1
         if name == "skill" and isinstance(inp, dict) and inp.get("id"):
@@ -321,6 +352,7 @@ class SessionAccumulator:
         line = f"[T#{seq}] {name} {status}: {summarize_input(inp)}"
         if status == "error":
             self.tool_errors[name] += 1
+            self.agents[self.agent]["tool_errors"] += 1
             msg = error_text(state.get("error"))
             self.errors.append((name, msg))
             line += f" !! {clip(msg, LIMIT_TOOL_ERROR)}"
@@ -351,11 +383,66 @@ def balance_by_directory(candidates: list[tuple], sessions: dict) -> list[tuple]
     return ordered
 
 
-def cap_transcript(text: str, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    head, tail = int(limit * 0.6), int(limit * 0.4)
-    return f"{text[:head]}\n\n…（中間省略 {len(text) - head - tail} 字）…\n\n{text[-tail:]}"
+def _size(lines: list[str]) -> int:
+    return sum(len(line) + 1 for line in lines)
+
+
+def cap_lines(lines: list[str], budget: int) -> list[str]:
+    """以整行為單位保留開頭約 60% 與結尾約 40%；第一行與最後一行必定保留，省略段落中的錯誤行集中列在省略標記後。"""
+    if _size(lines) <= budget:
+        return lines
+    head_budget, tail_budget = budget * 0.6, budget * 0.4
+    head, used, i = [], 0, 0
+    while i < len(lines) and (not head or used + len(lines[i]) + 1 <= head_budget):
+        # 第一行必留；比額度長時截短，避免單行撐爆額度
+        line = lines[i] if head or len(lines[i]) <= head_budget else clip(lines[i], max(int(head_budget), 120))
+        head.append(line)
+        used += len(line) + 1
+        i += 1
+    tail, used, j = [], 0, len(lines) - 1
+    while j >= i and (not tail or used + len(lines[j]) + 1 <= tail_budget):
+        line = lines[j] if tail or len(lines[j]) <= tail_budget else clip(lines[j], max(int(tail_budget), 120))
+        tail.insert(0, line)
+        used += len(line) + 1
+        j -= 1
+    middle = lines[i : j + 1]
+    if not middle:
+        return head + tail
+    errors = [clip(line, 240) for line in middle if " !! " in line]
+    note = f"；其中 {len(errors)} 筆錯誤列於下方" if errors else ""
+    marker = [f"…（中間省略 {len(middle)} 行、{_size(middle)} 字{note}）…"]
+    marker += errors[:MAX_OMITTED_ERRORS]
+    if len(errors) > MAX_OMITTED_ERRORS:
+        marker.append(f"…（另有 {len(errors) - MAX_OMITTED_ERRORS} 筆錯誤省略）…")
+    return head + [""] + marker + [""] + tail
+
+
+def section_header(section: dict) -> str:
+    kind = "主 session" if section["is_root"] else "子 session"
+    flag = "（疑似撞到步數上限）" if section["step_limit"] else ""
+    return f"\n## {kind} {section['id']}（agent={section['agent']}）{flag}\n"
+
+
+def render_transcript(header: list[str], sections: list[dict], limit: int) -> str:
+    """組出對話紀錄；超過 limit 時依各段長度分配額度並給每段保底額度，讓每個子 session 都留下開頭、錯誤與結尾。
+
+    保底內容（第一行、最後一行、省略段落中的錯誤行）優先於上限，因此結果可能略超過 limit。
+    """
+    total = _size(header) + sum(len(section_header(s)) + 1 + _size(s["lines"]) for s in sections)
+    capped = total > limit
+    available = max(limit - _size(header) - sum(len(section_header(s)) + 1 for s in sections), 0)
+    body_total = sum(_size(s["lines"]) for s in sections) or 1
+    # 段落很多時縮小保底額度，避免保底內容的總和遠超過上限
+    floor = min(MIN_SECTION_CHARS, max(MIN_SECTION_FLOOR, available // max(len(sections), 1)))
+    out = list(header)
+    for s in sections:
+        lines = s["lines"]
+        if capped:
+            budget = max(floor, int(available * _size(lines) / body_total))
+            lines = cap_lines(lines, budget)
+        out.append(section_header(s))
+        out.extend(lines)
+    return "\n".join(out)
 
 
 def make_slices(records: list[dict], budget: int) -> list[dict]:
@@ -538,6 +625,7 @@ def main(argv=None) -> int:
         "skills_loaded": collections.Counter(),
         "skills_mentioned": collections.Counter(),
         "counts": collections.Counter(),
+        "agents": collections.defaultdict(collections.Counter),
     }
     error_groups: dict[tuple[str, str], dict] = {}
     cost_total = 0.0
@@ -557,7 +645,7 @@ def main(argv=None) -> int:
             "標記：U=使用者 A=助理 T=工具呼叫 SKILL=使用者呼叫 skill SWITCH=切換 COMPACT=壓縮 SYN=系統合成 "
             "SHELL=使用者 shell IDLE=閒置錯誤；#後為訊息序號（seq），引用證據時使用。",
         ]
-        body = cap_transcript(redact("\n".join(header + acc.lines)), args.max_chars)
+        body = redact(render_transcript(header, acc.sections, args.max_chars))
         rel = f"transcripts/{idx:03d}-{root_id}.md"
         (out / rel).write_text(body, encoding="utf-8")
 
@@ -574,6 +662,9 @@ def main(argv=None) -> int:
         totals["skills_loaded"].update(acc.skills_loaded)
         totals["skills_mentioned"].update(acc.skills_mentioned)
         totals["counts"].update(acc.counts)
+        for name, counter in acc.agents.items():
+            totals["agents"][name].update(counter)
+        step_limit = sum(1 for s in acc.sections if s["step_limit"])
         records.append(
             {
                 "id": root_id,
@@ -590,6 +681,8 @@ def main(argv=None) -> int:
                 "skills_loaded": dict(acc.skills_loaded),
                 "skills_mentioned": dict(acc.skills_mentioned),
                 **dict(acc.counts),
+                "agents": {name: dict(c) for name, c in acc.agents.items()},
+                "step_limit_suspected": step_limit,
                 "transcript": rel,
                 "chars": len(body),
             }
@@ -638,6 +731,12 @@ def main(argv=None) -> int:
             "skills_loaded": dict(totals["skills_loaded"].most_common()),
             "skills_mentioned_by_user": dict(totals["skills_mentioned"].most_common()),
             **dict(totals["counts"]),
+            # 依 agent 類型彙總：sessions、child_sessions、tool_calls、tool_errors、assistant_errors、step_limit_suspected
+            "agents": {
+                name: dict(c)
+                for name, c in sorted(totals["agents"].items(), key=lambda kv: -kv[1].get("tool_calls", 0))
+            },
+            "step_limit_suspected": sum(r["step_limit_suspected"] for r in records),
             "top_errors": sorted(error_groups.values(), key=lambda g: -g["count"])[:20],
         },
         "skills_used": [{"id": sid, "path": skill_index.get(sid)} for sid in sorted(used_ids)],

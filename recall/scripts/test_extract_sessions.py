@@ -114,6 +114,59 @@ class ExtractSessionsTest(unittest.TestCase):
         self.assertIn("ses_child", transcript)
         self.assertIn("Search timed out", transcript)
 
+    # 對話紀錄超過上限時，每個子 session 段落都要保留，並留下各自的交辦內容（第一則）與最後回覆。
+    def test_truncation_keeps_every_child_session(self):
+        self.fx.session("ses_big")
+        for i in range(120):
+            self.fx.user("ses_big", f"主 session 填充訊息 {i} " + "內容" * 40)
+        for c in range(5):
+            cid = f"ses_kid{c}"
+            self.fx.session(cid, parent="ses_big", agent="explore")
+            self.fx.user(cid, f"交辦任務 {c}")
+            for i in range(30):
+                self.fx.assistant(cid, {"type": "text", "text": f"子 {c} 進度 {i} " + "細節" * 30})
+            self.fx.assistant(cid, {"type": "text", "text": f"子 {c} 最後結論"})
+        meta = self.run_extract("--max-chars", "12000")
+        transcript = (self.out / meta["sessions"][0]["transcript"]).read_text(encoding="utf-8")
+        self.assertIn("中間省略", transcript)
+        for c in range(5):
+            self.assertIn(f"## 子 session ses_kid{c}", transcript)
+            self.assertIn(f"交辦任務 {c}", transcript)
+            self.assertIn(f"子 {c} 最後結論", transcript)
+
+    # 被省略的段落中若有錯誤，錯誤行要集中列在省略標記後，不隨截斷消失。
+    def test_errors_in_omitted_middle_are_listed(self):
+        self.fx.session("ses_err")
+        for i in range(60):
+            self.fx.user("ses_err", f"填充 {i} " + "文字" * 60)
+            if i == 30:
+                self.fx.assistant("ses_err", tool("grep", "error", {"pattern": "X"}, "中段發生的特殊錯誤"))
+        meta = self.run_extract("--max-chars", "4000")
+        transcript = (self.out / meta["sessions"][0]["transcript"]).read_text(encoding="utf-8")
+        self.assertIn("筆錯誤列於下方", transcript)
+        self.assertIn("中段發生的特殊錯誤", transcript)
+
+    # 依 agent 類型彙總呼叫與失敗；子 session 提到步數上限時標記疑似撞到上限。
+    def test_agent_stats_and_step_limit(self):
+        self.fx.session("ses_main", agent="build")
+        self.fx.session("ses_sub", parent="ses_main", agent="explore")
+        self.fx.assistant("ses_main", tool("subagent", "completed", {"agent": "explore"}))
+        # 主 session 轉述 subagent 結果或討論步數上限，不應重複計數
+        self.fx.message("ses_main", "synthetic", {"text": "<subagent>已達本 agent 的最大執行步數</subagent>"})
+        self.fx.assistant("ses_sub", tool("grep", "error", {"pattern": "Y"}, "Search timed out"), tool("read", "completed", {"path": "a"}))
+        self.fx.assistant("ses_sub", {"type": "text", "text": "已達最大執行步數，以下是目前結果"})
+        meta = self.run_extract()
+        agents = meta["totals"]["agents"]
+        self.assertEqual(agents["explore"]["child_sessions"], 1)
+        self.assertEqual(agents["explore"]["tool_calls"], 2)
+        self.assertEqual(agents["explore"]["tool_errors"], 1)
+        self.assertEqual(agents["explore"]["step_limit_suspected"], 1)
+        self.assertEqual(agents["build"]["tool_calls"], 1)
+        self.assertNotIn("step_limit_suspected", agents["build"])
+        self.assertEqual(meta["totals"]["step_limit_suspected"], 1)
+        transcript = (self.out / meta["sessions"][0]["transcript"]).read_text(encoding="utf-8")
+        self.assertIn("ses_sub（agent=explore）（疑似撞到步數上限）", transcript)
+
     # 預設只取 --directory 底下的 session；加 --all-projects 才納入其他專案。
     def test_directory_filter_and_all_projects(self):
         self.fx.session("ses_a", directory=os.path.join(PROJECT, "sub"))
